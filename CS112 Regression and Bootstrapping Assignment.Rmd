@@ -1,0 +1,628 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+
+```{r}
+#Question 1.1 
+
+#set seed for good practice
+set.seed(99)
+library(Metrics)
+
+#Create samples for independent variables
+num_hair <- sample(50000: 100000, 1000)
+num_blowdry <- rnorm(1000, mean = 6, sd = 1.5)
+years_highered <- rnorm(1000, mean = 4, sd = 1)
+
+#function to determine when a person will start hair loss
+age_of_hair_loss <- ((1/2000)*num_hair) + ((10-(num_blowdry))*5) + ((8-(years_highered))*3) + rnorm(1000, mean = -5, sd = 3)
+
+#put into dataframe
+df_hair <- data.frame(num_hair, num_blowdry, years_highered, age_of_hair_loss)
+
+dim(df_hair)
+print(mean(age_of_hair_loss))
+```
+
+
+```{r}
+#Question 1.3
+
+#incorrect linear model, assumes years_highered is squared
+lm_incorrect <- lm(age_of_hair_loss~ num_hair + num_blowdry , data = df_hair)
+
+#create 1000 simulation of coefficients of incorrect linear model
+incorrect_sim <- sim(lm_incorrect, n.sims = 1000)
+
+#Generate predictions using the coefficients from simulation of incorrect linear model
+incorrect_pred <- coef(incorrect_sim)[, 1] + (num_hair * coef(incorrect_sim)[, 2]) + (num_blowdry * coef(incorrect_sim)[, 3]) + rnorm(1000, mean = 0, sd = summary(lm_incorrect)$sigma) 
+#calculate RMSE, as well as difference of means between actual values, and predicted values
+actual <- age_of_hair_loss
+print(paste("The difference between means of actual values and incorrectly predicted values is: " , round(mean(actual) - mean(incorrect_pred), 3)))
+RMSE_incorrect <- sqrt(mean((incorrect_pred - actual)^2))
+print(paste("The RMSE using the incorrect model is: ", round(RMSE_incorrect, 3)))
+```
+
+```{r}
+#Question 1.4
+
+#correct linear model
+lm_correct <- lm(age_of_hair_loss~ num_hair + num_blowdry + years_highered, data = df_hair)
+
+#create 1000 simulation of coefficients of correct linear model
+correct_sim <- sim(lm_correct, n.sims = 1000)
+
+#Generate predictions using the coefficients from simulation of correct linear model
+#sigma equals 2.956684
+correct_pred <- coef(correct_sim)[, 1] + (num_hair * coef(correct_sim)[, 2]) + (num_blowdry * coef(correct_sim)[, 3]) + (years_highered * coef(correct_sim)[, 4]) + rnorm(1000, mean = 0, sd = summary(lm_correct)$sigma) 
+#calculate RMSE, as well as difference of means between actual values, and predicted values
+print(paste("The difference between means of actual values and correctly predicted values is: " , round(mean(actual) - mean(correct_pred), 3)))
+RMSE_correct <- sqrt(mean((correct_pred - actual)^2))
+print(paste("The RMSE using the correct model is: ", round(RMSE_correct, 3)))
+```
+
+
+
+```{r}
+#Question 2.1
+
+#data is created to ensure positive correlation. Weights are all slightly positive around mean 0.05
+x_values <- sample(200)
+weights <- rnorm(200, sd = 0.03, mean = 0.05)
+y_values <- x_values * weights
+data <- data.frame(x_values, y_values)
+
+#Create linear model and plot with line of best fit
+lm1 <- lm(y_values ~ x_values, data = data)
+summary(lm1)
+library(ggplot2)
+ggplot(data, aes(x = x_values, y= y_values)) +
+  geom_point() +
+  geom_smooth(method=lm) + 
+  labs(x = "X Values", y = "Y Values", title = "Positive Correlation Simulated Dataset")
+```
+
+```{r}
+#Question 2.2
+
+#add one data point that is highly negative
+data_neg <- rbind(data, c(201,-1000000000))
+
+#run linear model again on dataset with outlier
+lm_neg <- lm(y_values ~ x_values, data = data_neg)
+ggplot(data_neg, aes(x = x_values, y= y_values)) +
+  geom_point() +
+  geom_smooth(method=lm) + 
+  labs(x = "X Values", y = "Y Values", title = "Negative Correlation Simulated Dataset")
+
+#slope is very negative
+print(paste("The slope of the line is: ", round(coef(summary(lm_neg))["x_values", "Estimate"], 3)))
+```
+```{r}
+#Question 3.1
+
+library(Matching)
+data(lalonde)
+
+#simple linear regression of lalonde
+lalonde_lm <- lm(re78~age + educ + re74 + re75 + hisp + black, data=lalonde)
+
+```
+
+```{r}
+#Question 3.2
+
+#Help from Stevedavies Ndegwa
+#Acquire r-squared value for lalonde_lm
+summary(lalonde_lm)
+confint(lalonde_lm)
+
+#calculate r^2 by hand
+#to calculate the r_squared, get the total sum of squares and the residual sum of squares
+#obtain predictions for the outcome variable re78
+preds <- predict(lalonde_lm, lalonde)
+
+#residual sum of squares; difference between actual and predicted
+rss <- sum((preds - lalonde$re78)^2)
+
+#total sum of squares; difference between actual and mean of actual
+tss <- sum((lalonde$re78 - mean(lalonde$re78))^2)
+
+#Calculate for R^2
+#note that both values of r^2 (in summary(lalonde_lm) and by hand) are the same
+r_squared <- 1 - (rss/tss)
+message("R-squared is: ", round((r_squared* 100),3), "%")
+```
+
+
+```{r}
+#Question 3.3
+
+#distribution of expected values
+
+#empty lists to store values for dataframe later to plot confidence intervals
+Education <- c()
+Average <- c()
+Lower.Bound <- c()
+Upper.Bound <- c()
+
+#outer loop loops over values of educ as it varies from 3 to 16
+for (educ in c(3:16)){
+  
+  #temporary vector to store expected values 
+  expected_distribution <- c()
+  
+  #inner loop generates multiple expected values (average of many predicted values)
+  for (x in c(1:100)){
+    
+    #100 simulations of lalonde_lm
+    lalonde_sim <- sim(lalonde_lm, n.sims = 100)
+    
+    #apply() function across rows for coefficients of our simulations. Multiplies values of x with Betas
+    row.multiplied <- apply(coef(lalonde_sim), 1, function(x) x * c(1, mean(lalonde$age), educ, mean(lalonde$re74), mean(lalonde$re75), mean(lalonde$hisp), mean(lalonde$black)))
+    
+    #Adding across each row gives us predicted values, 1 for each simulation
+    #then add on stochastic component of our model. This adds large variance for predicted values, but averages out for expected values
+    predicted_values <- apply(row.multiplied, 2, sum) + rnorm(100, mean = 0, sd = lalonde_sim@sigma)
+    
+    #expected values (n = for loops) are just average of predicted values (n=n.sims)
+    expected_value <- mean(predicted_values)
+    
+    #append to our list of expected values
+    expected_distribution <- c(expected_distribution, mean(expected_value))
+  }
+  
+  #get confidence interval for each SET of expected values
+  expected_CI <- (quantile(expected_distribution, probs = c(0.025, 0.975)))
+  
+  #append respected values to list
+  Education <- c(Education, educ)
+  Average <- c(Average, mean(expected_distribution))
+  Lower.Bound <- c(Lower.Bound, expected_CI[1])
+  Upper.Bound <- c(Upper.Bound, expected_CI[2])
+  
+}
+
+#turn it all into a beautiful dataframe
+df_expected <- data.frame(Education, Average, Lower.Bound, Upper.Bound)
+df_expected
+```
+```{r}
+#data visualization for expected values
+library(ggplot2)
+ggplot(df_expected, aes(x = Education, y = Average)) +
+  geom_point(size=2)+
+  geom_errorbar(aes(ymax = Upper.Bound, ymin = Lower.Bound)) +
+  scale_x_continuous(name = "Education", breaks=seq(0,17,1)) +
+  labs(y = "Expected Values of Re78", title = "Confidence Intervals for Expected Values of Re78")
+```
+
+
+```{r}
+#Question 3.4
+
+#distribution of predicted values
+
+#refer to code above for Question 3.3. Everything is the same except we only a set of predicted values for each value of educ
+#1 set gives us 1 expected value
+Education <- c()
+Average <- c()
+Lower.Bound <- c()
+Upper.Bound <- c()
+
+for (educ in c(3:16)){
+  
+  lalonde_sim <- sim(lalonde_lm, n.sims = 1000)
+  row.multiplied <- apply(coef(lalonde_sim), 1, function(x) x * c(1, mean(lalonde$age), educ, mean(lalonde$re74), mean(lalonde$re75), mean(lalonde$hisp), mean(lalonde$black)))
+  predicted_values <- apply(row.multiplied, 2, sum) + rnorm(1000, mean = 0, sd = lalonde_sim@sigma)
+  expected_value <- mean(predicted_values)
+  predicted_CI <- (quantile(predicted_values, probs = c(0.025, 0.975)))
+  Education <- c(Education, educ)
+  Average <- c(Average, expected_value)
+  Lower.Bound <- c(Lower.Bound, predicted_CI[1])
+  Upper.Bound <- c(Upper.Bound, predicted_CI[2])
+
+}
+df_pred <- data.frame(Education, Average, Lower.Bound, Upper.Bound)
+df_pred
+
+```
+
+
+```{r}
+#data visualization for predicted values
+library(ggplot2)
+ggplot(df_pred, aes(x = Education, y = Average)) +
+  geom_point(size=2)+
+  geom_errorbar(aes(ymax = Upper.Bound, ymin = Lower.Bound)) +
+  scale_x_continuous(name = "Education", breaks=seq(0,17,1)) +
+  labs(y = "Predicted Values of Re78", title = "Confidence Intervals for Predicted Values of Re78")
+```
+
+```{r}
+#Question 4.1
+
+#create logistic regression of treat to other variables
+lalonde_glm <- glm(treat~age+educ+hisp+re74+re75, data = lalonde, family = "binomial")
+exp(summary(lalonde_glm)$coef["age", "Estimate"])
+exp(summary(lalonde_glm)$coef["educ", "Estimate"])
+confint(lalonde_glm)[c("age", "educ"),]
+summary(lalonde_glm)
+```
+
+
+
+```{r}
+#Question 4.2
+
+#Help from Arnav Hazra
+#function to acquire a bootstrapped sample of data
+boot <- function(data){
+  bootstrap_sample <- sample(1:nrow(data), size=nrow(data), replace = TRUE)
+  return(bootstrap_sample)
+}
+
+#temporary vectors for age and educ
+age_coefs <- rep(1:1000)
+educ_coefs <- rep(1:1000)
+
+#over 1000 loops, acquire a bootstrap sample, run logistic regression, and store coefficients for age and educ into our vector
+for (i in (1:1000)){
+  booted_sample <- lalonde[boot(lalonde),]
+  booted_glm <- glm(treat ~ age + educ + hisp + re74 + re75, data = booted_sample)
+  age_coefs[i] <- booted_glm$coefficients[2]
+  educ_coefs[i] <-booted_glm$coefficients[3]
+}
+
+#Confidence intervals from the estimates obtained in the 1000 iterations
+age_confint <- quantile(age_coefs, probs=c(0.025, 0.975))
+educ_confint <- quantile(educ_coefs, probs=c(0.025, 0.975))
+educ_confint
+age_confint
+```
+
+```{r}
+#Question 4.3
+
+#distribution of expected values using logistic regression
+#refer to code from Question 3.3. But now done for logistic regression not the linear one
+#almost everything is the same
+#except now, we must convert our final results from plugging everything into linear equation from log odds to regular odds
+
+
+#logit2odds function turns logit values into probabilites
+logit2odds <- function(logit){
+  odds <- exp(logit)
+  prob <- odds / (1 + odds)
+  return(prob)
+}
+
+Education <- c()
+Average <- c()
+Lower.Bound <- c()
+Upper.Bound <- c()
+for (educ in c(3:16)){
+  expected_distribution <- c()
+  for (x in c(1:100)){
+    lalonde_sim_glm <- sim(lalonde_glm, n.sims = 100)
+    row.multiplied <- apply(coef(lalonde_sim_glm), 1, function(x) x * c(1, mean(lalonde$age), educ, mean(lalonde$hisp), mean(lalonde$re74), mean(lalonde$re75)))
+    predicted_values <- apply(row.multiplied, 2, sum) + rnorm(100, mean = 0, sd = lalonde_sim_glm@sigma)
+    expected_value <- mean(predicted_values)
+    expected_distribution <- c(expected_distribution, mean(expected_value))
+  }
+  expected_CI <- (quantile(expected_distribution, probs = c(0.025, 0.975)))
+  Education <- c(Education, educ)
+  Average <- c(Average, mean(expected_distribution))
+  Lower.Bound <- c(Lower.Bound, expected_CI[1])
+  Upper.Bound <- c(Upper.Bound, expected_CI[2])
+  
+}
+
+#Put it all into a nice dataframe
+df_expected_glm <- data.frame(Education, Average, Lower.Bound, Upper.Bound)
+df_expected_glm$Average <- logit2odds(df_expected_glm$Average)
+df_expected_glm$Lower.Bound <- logit2odds(df_expected_glm$Lower.Bound)
+df_expected_glm$Upper.Bound <- logit2odds(df_expected_glm$Upper.Bound)
+df_expected_glm
+
+```
+```{r}
+#Question 4.3
+
+#data visualization for expected values
+
+library(ggplot2)
+ggplot(df_expected_glm, aes(x = Education, y = Average)) +
+  geom_point(size=2)+
+  geom_errorbar(aes(ymax = Upper.Bound, ymin = Lower.Bound))+
+  scale_x_continuous(name = "Education", breaks=seq(0,17,1)) +
+  labs(y = "Confidence Intervals for Expected Probability of Receiving Treatment", title = "Expected Probabilities of Receiving Treatment Using Logistic Regression")
+
+```
+
+
+```{r}
+#Question 4.4
+
+#distribution of predicted values using logistic regression
+#refer to code from Question 3.4. But now done for logistic regression not the linear one
+#almost everything is the same
+#except now, we must convert our final results from plugging everything into linear equation from log odds to regular odds
+
+
+#logit2odds function turns logit values into probabilites
+logit2odds <- function(logit){
+  odds <- exp(logit)
+  prob <- odds / (1 + odds)
+  return(prob)
+}
+
+Education <- c()
+Average <- c()
+Lower.Bound <- c()
+Upper.Bound <- c()
+
+for (educ in c(3:16)){
+  lalonde_sim_glm <- sim(lalonde_glm, n.sims = 1000)
+  row.multiplied <- apply(coef(lalonde_sim_glm), 1, function(x) x * c(1, mean(lalonde$age), educ, mean(lalonde$hisp), mean(lalonde$re74), mean(lalonde$re75)))
+  
+  predicted_values <- apply(row.multiplied, 2, sum) + rnorm(1000, mean = 0, sd = lalonde_sim_glm@sigma)
+  expected_value <- mean(predicted_values)
+  predicted_CI <- (quantile(predicted_values, probs = c(0.025, 0.975)))
+  Education <- c(Education, educ)
+  Average <- c(Average, expected_value)
+  Lower.Bound <- c(Lower.Bound, predicted_CI[1])
+  Upper.Bound <- c(Upper.Bound, predicted_CI[2])
+
+}
+
+#Put it all into a dataframe
+df_pred_glm <- data.frame(Education, Average, Lower.Bound, Upper.Bound)
+df_pred_glm$Average <- logit2odds(df_pred_glm$Average)
+df_pred_glm$Lower.Bound <- logit2odds(df_pred_glm$Lower.Bound)
+df_pred_glm$Upper.Bound <- logit2odds(df_pred_glm$Upper.Bound)
+df_pred_glm
+
+```
+
+
+```{r}
+#Question 4.4
+
+#data visualization for expected values
+library(ggplot2)
+ggplot(df_pred_glm, aes(x = Education, y = Average)) +
+  geom_point(size=2)+
+  geom_errorbar(aes(ymax = Upper.Bound, ymin = Lower.Bound))+
+  scale_x_continuous(name = "Education", breaks=seq(0,17,1)) +
+  labs(y = "Confidence Intervals for Predicted Probability of Receiving Treatment", title = "Predicted Probabilities of Receiving Treatment Using Logistic Regression")
+```
+```{r}
+#Question 5
+
+trt1 = matrix(NA,nrow=2,ncol=7)
+ctrl = matrix(NA,nrow=2,ncol=7) 
+
+trt1[,1]=c(3.7, 6.5) #18  
+ctrl[,1]=c(5, 8)
+
+trt1[,2]=c(5, 8.5) #22
+ctrl[,2]=c(7.5, 9)
+
+trt1[,3]=c(6, 9) #26
+ctrl[,3]=c(8.5, 10)
+
+trt1[,4]=c(5, 7) #30
+ctrl[,4]=c(6, 8)
+
+trt1[,5]=c(3.5, 5) #34
+ctrl[,5]=c(4.5, 7)
+
+trt1[,6]=c(2, 3.5) #38
+ctrl[,6]=c(3.5, 6)
+
+trt1[,7]=c(0.5, 2) #42
+ctrl[,7]=c(2.5, 5)
+
+# colors to each group
+c1 = rgb(red = 0.3, green = 0, blue = 1, alpha = 0.7) #trt1
+c2 = rgb(red = 1, green = 0.6, blue = 0, alpha = 1) #trt2
+c3 = rgb(red = 0, green = 0.5, blue = 0, alpha = 0.7) #ctrl
+
+# creates the background of the graph
+plot(x = c(1:100), y = c(1:100), 
+     type = "n", 
+     xlim = c(17,43), 
+     ylim = c(0,11), 
+     cex.lab=1,
+     main = "Stress Level - 95% Prediction Intervals", 
+     xlab = "Age", 
+     ylab = "Average Stress Level per Month", 
+     xaxt = "n")
+
+axis(1, at=seq(18,42,by=4), seq(18, 42, by=4))
+
+grid(nx = NA, ny = NULL, col = "lightgray", lty = "dotted",
+     lwd=par("lwd"), equilogs = TRUE)
+
+# adds the legend
+legend('topright',legend=c('Treatment','Control'),fill=c(c1,c2))
+
+# iterates to add stuff to plot
+for (age in seq(from=18,to=42,by=4)) { 
+  #treatment
+  segments(x0=age-0.2, y0=trt1[1, (age-18)/4+1],
+           x1=age-0.2, y1=trt1[2, (age-18)/4+1], lwd=4, col=c1)
+  
+  #control
+  segments(x0=age+0.2, y0=ctrl[1, (age-18)/4+1],
+           x1=age+0.2, y1=ctrl[2, (age-18)/4+1], lwd=4, col=c2)
+}
+```
+
+```{r}
+#Question 6.1
+
+#import data locally, filter make it nice
+kickstarter_df <- read.csv("C:\\Users\\chrec\\Downloads\\ks-projects-201801.csv", header = TRUE, stringsAsFactors = FALSE, na.strings=c(""," ","NA"))
+dim(kickstarter_df)
+kick_filt <- na.omit(kickstarter_df)
+dim(kick_filt)
+head(kick_filt)
+```
+
+```{r}
+#Question 6.2
+
+#Help from Gisele Araujo
+#creates new column that returns 1 if state is success, 0 all else
+kick_filt$success <- ifelse(kick_filt$state == 'successful', 1, 0)
+head(kick_filt)
+```
+
+
+```{r}
+library(dplyr)
+#Question 6.3
+
+#convert to date
+kick_filt$deadline <- as.Date(kick_filt$deadline)
+kick_filt$launched <- as.Date(kick_filt$launched)
+
+#Subtract launch and deadline dates, add as new column to dataframe
+length <- kick_filt %>%
+  transmute(length = deadline - launched)
+kick_filt1 <- cbind(kick_filt, length)
+
+#name changes are so to keep ease of working/iterating/debugging
+#drop  missing values
+kick_filt2 <- na.omit(kick_filt1)
+
+#remove any rows whose duration is more than 60 days
+kick_filt3 <- subset(kick_filt2, length<= 60)
+head(kick_filt3)
+```
+
+
+```{r}
+#Question 6.4
+
+#create the indices for the data with 80% as training
+train_indices = sort(sample(nrow(kick_filt3), nrow(kick_filt3)*.8))
+
+#create a training set
+kick_train <- kick_filt3[train_indices,]
+
+#create a testing set, just the remaining data
+kick_test <- kick_filt3[-train_indices,]
+head(kick_filt3)
+```
+
+```{r}
+#Question 6.5
+
+#convert main category to factor
+kick_filt3$main_category <- as.factor(kick_filt3$main_category)
+
+#run logistic regression for success vs. other variables, using training dataset
+kick_lgm <- glm(success ~ backers + length + main_category + goal, data = kick_train, family="binomial")
+kick_lgm
+
+```
+
+```{r}
+#Question 6.6
+
+#make a prediction on the logistic regression for the test set
+kick_pred_test <- predict(kick_lgm, kick_test)
+
+#make a prediction for training set
+kick_pred_train <- predict(kick_lgm, kick_train)
+
+#Question is wack, can't do RMSE for logistic regression. It makes no sense, so have to put data in such a way that we can classify
+
+#threshould 0.4 is arbitrary, selected because it gives good classification rate
+#convert the predicted values to 0 if they are less than 0.4 and 1 if greater than 0.4
+kick_pred_tebinary <- ifelse(kick_pred_test <= 0.4, 0, 1)
+
+#convert the predicted values to 0 if they are less than 0.4 and 1 if greater than 0.4
+kick_pred_trbinary <- ifelse(kick_pred_train <= 0.4, 0, 1)
+```
+
+```{r}
+#Question 6.7
+
+#classification table of predictions on training set
+kick_tr_table <- table(kick_pred_trbinary, kick_train$success)
+
+#training set prediction classification accuracy
+train_accuracy <- sum(diag(kick_tr_table))/sum(kick_tr_table) 
+
+#missclassification rate of training set prediction as a percentage
+tr_misclass_rate <- round(((1 - train_accuracy) *100), 2)
+message("The misclassifcation error rate on the training set of the data is ",tr_misclass_rate, "%")
+
+#classification table of predictions on test set
+kick_te_table <- table(kick_pred_tebinary, kick_test$success)
+
+#training set prediction classification accuracy
+test_accuracy <- sum(diag(kick_te_table))/sum(kick_te_table) 
+
+#missclassification rate of test set prediction as a percentage
+te_misclass_rate <- round(((1 - test_accuracy) *100), 2)
+message("The misclassifcation error rate on the test set of the data is ",te_misclass_rate, "%")
+```
+
+```{r}
+#Question 6.8
+
+#set how many lines of data to sample
+ntimes <- 1000
+
+#subset ntimes lines of data
+kick_filt_mini <- kick_filt3[1:ntimes,]
+
+#function to convert logit to odds
+logit2odds <- function(logit){
+  odds <- exp(logit)
+  prob <- odds / (1 + odds)
+  return(prob)
+}
+
+#empty lists to store predictions and actual values
+predicted_odds <- c()
+actual_value <- c()
+
+#for each sample (of length 1) in kick_filt_mini, have all other data be used as training data. Train regression model on training data, then test on current highlighted sample.
+for (x in 1:ntimes){
+  
+  #one sample is test, all others to train
+  kick_filt_mini_te <- kick_filt_mini[x,]
+  kick_filt_mini_tr <- kick_filt_mini[-x,]
+  
+  #tun model on train to fit
+  #Also suppress "glm.fit: fitted probabilities numerically 0 or 1 occurred" warnings
+  temp_glm <- suppressWarnings(glm(success ~ backers + length + main_category + goal, data = kick_filt_mini_tr, family="binomial"))
+  
+  #test on test sample
+  temp_predict_logit <- suppressWarnings(predict(temp_glm, kick_filt_mini_te))
+  
+  #convert logit outputs to odds
+  predict_odds <- logit2odds(temp_predict_logit)
+  predicted_odds <- c(predicted_odds, predict_odds)
+  actual_value <- c(actual_value, kick_filt_mini_te$success)
+}
+
+#round odds to either 0 or 1, then calculate classification rates
+predicted_odds_binary <- ifelse(predicted_odds <= 0.4, 0, 1)
+odds_table <- table(predicted_odds_binary, actual_value)
+test_accuracy <- sum(diag(odds_table))/sum(odds_table) 
+print (test_accuracy)
+misclass_rate <- round(((1 - test_accuracy) *100), 2)
+message("The misclassifcation error rate on the data is: ",misclass_rate, "%")
+```
+
+
+
