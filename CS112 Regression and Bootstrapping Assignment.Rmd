@@ -338,7 +338,7 @@ ggplot(df_expected_glm, aes(x = Education, y = Average)) +
   geom_point(size=2)+
   geom_errorbar(aes(ymax = Upper.Bound, ymin = Lower.Bound))+
   scale_x_continuous(name = "Education", breaks=seq(0,17,1)) +
-  labs(y = "Confidence Intervals for Expected Probability of Receiving Treatment", title = "Expected Probabilities of Receiving Treatment Using Logistic Regression")
+  labs(y = "Expected Probabilities of Receiving Treatment Using Logistic Regression", title = "Confidence Intervals for Expected Probability of Receiving Treatment")
 
 ```
 
@@ -397,7 +397,7 @@ ggplot(df_pred_glm, aes(x = Education, y = Average)) +
   geom_point(size=2)+
   geom_errorbar(aes(ymax = Upper.Bound, ymin = Lower.Bound))+
   scale_x_continuous(name = "Education", breaks=seq(0,17,1)) +
-  labs(y = "Confidence Intervals for Predicted Probability of Receiving Treatment", title = "Predicted Probabilities of Receiving Treatment Using Logistic Regression")
+  labs(y = "Predicted Probabilities of Receiving Treatment Using Logistic Regression", title = "Confidence Intervals for Predicted Probability of Receiving Treatment")
 ```
 ```{r}
 #Question 5
